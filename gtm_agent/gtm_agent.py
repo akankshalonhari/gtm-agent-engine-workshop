@@ -38,6 +38,9 @@ MODEL_NAME = "gpt-4o-mini"
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
+SENSITIVE_PROSPECT_FIELDS = {"billing_qualification"}
+
+
 @tool
 def lookup_offering(offering_id: str) -> dict:
     "Look up an offering by offering_id (e.g. 'OFFER-10001'). Returns the offering and a found flag."
@@ -52,13 +55,15 @@ def build_prospect_profile(prospect_id: str) -> dict:
     "Assemble a full prospect profile (engagement history, account details, tech stack) and store it. Returns the profile and a found flag."
     existing = data_service.get_profile_from_db(prospect_id)["prospect_profile"]
     if existing is not None:
+        existing = {k: v for k, v in existing.items() if k not in SENSITIVE_PROSPECT_FIELDS}
         return {"prospect_profile": existing, "found": True}
     rec = data_service.get_prospect_record(prospect_id)
     if rec is None:
         return {"prospect_profile": None, "found": False}
+    allowed_fields = ("name", "email", "annual_revenue", "disqualified", "enrichment_source")
     built = {
         "prospect_id": prospect_id,
-        **rec,
+        **{k: rec[k] for k in allowed_fields if k in rec and k not in SENSITIVE_PROSPECT_FIELDS},
         "engagement_history": data_service.fetch_engagement_history(prospect_id),
         "account_details": data_service.fetch_account_details(prospect_id),
         "tech_stack": data_service.fetch_tech_stack(prospect_id),
@@ -133,7 +138,8 @@ def get_prospect(prospect_id: str) -> dict:
     contact = {
         "prospect_id": prospect_id,
         **{k: v for k, v in record.items()
-           if k not in ("engagement_history", "account_details", "tech_stack")},
+           if k not in ("engagement_history", "account_details", "tech_stack")
+           and k not in SENSITIVE_PROSPECT_FIELDS},
     }
     return {"prospect": contact, "found": True}
 
